@@ -172,6 +172,8 @@ class BrowserWindow(QMainWindow):
         sidebar_layout.addWidget(sidebar_title)
         
         self.sidebar = QListWidget()
+        self.sidebar.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.sidebar.customContextMenuRequested.connect(self.on_sidebar_context_menu)
         self.sidebar.itemClicked.connect(self.on_collection_click)
         sidebar_layout.addWidget(self.sidebar)
         splitter.addWidget(self.sidebar_container)
@@ -187,6 +189,8 @@ class BrowserWindow(QMainWindow):
         
         self.image_list = QListWidget()
         self.image_list.setIconSize(QSize(110, 110))
+        self.image_list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.image_list.customContextMenuRequested.connect(self.on_image_list_context_menu)
         self.image_list.itemClicked.connect(self.on_image_click)
         list_layout.addWidget(self.image_list)
         splitter.addWidget(self.list_container)
@@ -391,6 +395,49 @@ class BrowserWindow(QMainWindow):
                 self.load_images()
                 self.scene.clear()
                 self.apply_btn.setEnabled(False)
+
+    def on_sidebar_context_menu(self, pos):
+        item = self.sidebar.itemAt(pos)
+        if not item: return
+        
+        menu = QMenu(self)
+        del_action = menu.addAction("🗑️ Delete Collection")
+        
+        action = menu.exec(self.sidebar.mapToGlobal(pos))
+        if action == del_action:
+            col_name = item.text()
+            if col_name == "Default":
+                QMessageBox.warning(self, "Error", "Cannot delete the Default collection.")
+                return
+                
+            if QMessageBox.question(self, "Delete Collection", f"Are you sure you want to delete the collection '{col_name}' and all its images?", 
+                                    QMessageBox.Yes|QMessageBox.No) == QMessageBox.Yes:
+                if storage.delete_collection(col_name):
+                    self.refresh_collections()
+                    # If we deleted the current one, the logic in storage resets it to Default
+                    self.load_images()
+                    self.scene.clear()
+
+    def on_image_list_context_menu(self, pos):
+        item = self.image_list.itemAt(pos)
+        if not item: return
+        
+        self.image_list.setCurrentItem(item)
+        self.on_image_click(item) # Select it
+        
+        menu = QMenu(self)
+        copy_action = menu.addAction("📋 Copy to Clipboard")
+        export_action = menu.addAction("📂 Export...")
+        menu.addSeparator()
+        del_action = menu.addAction("🗑️ Delete Image")
+        
+        action = menu.exec(self.image_list.mapToGlobal(pos))
+        if action == copy_action:
+            self.copy_to_clipboard()
+        elif action == export_action:
+            self.save_as()
+        elif action == del_action:
+            self.delete_active_image()
 
     def save_as(self):
         if not self.current_img_name: return

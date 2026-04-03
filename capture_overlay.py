@@ -12,7 +12,7 @@ class CaptureOverlay(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
-        self.setAttribute(Qt.WA_TranslucentBackground) # Make background transparent
+        # self.setAttribute(Qt.WA_TranslucentBackground) # Removed to avoid visibility issues
         self.setWindowState(Qt.WindowFullScreen)
         self.setCursor(Qt.CrossCursor)
         self.setMouseTracking(True)
@@ -21,22 +21,22 @@ class CaptureOverlay(QWidget):
         self.selection_rect = QRect()
         self.is_selecting = False
         
-        # We don't necessarily need the full screen pixmap anymore 
-        # if we just want to see the "live" screen, but we'll keep it for the dimmed effect
+        # Grab the screen once at the start.
         self.full_screen_pixmap = QApplication.primaryScreen().grabWindow(0)
 
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         
-        # 1. Fill the entire screen with a semi-transparent dark shade
-        overlay_color = QColor(0, 0, 0, 120) # 120/255 opacity
+        # 1. Draw the actual screen capture as the base layer
+        painter.drawPixmap(self.rect(), self.full_screen_pixmap)
+        
+        # 2. Draw the semi-transparent overlay everywhere except the selection
+        overlay_color = QColor(0, 0, 0, 120)
         
         if self.selection_rect.isNull():
-            # Nothing selected: dim the whole screen
             painter.fillRect(self.rect(), overlay_color)
         else:
-            # Masking: Dim everything EXCEPT the selection_rect
             from PySide6.QtGui import QRegion
             full_region = QRegion(self.rect())
             cutout_region = QRegion(self.selection_rect)
@@ -46,19 +46,20 @@ class CaptureOverlay(QWidget):
             painter.fillRect(self.rect(), overlay_color)
             painter.setClipping(False)
             
-            # Draw a border around the selection
+            # 3. Draw selection border and dimensions
             pen = QPen(QColor("#1A73E8"), 2)
             painter.setPen(pen)
             painter.drawRect(self.selection_rect)
             
-            # Show the dimensions in a tooltip-like box
             dim_text = f" {self.selection_rect.width()} x {self.selection_rect.height()} "
             painter.setBrush(QColor("#1A73E8"))
             painter.setPen(Qt.white)
-            rect_text = painter.fontMetrics().boundingRect(dim_text)
-            rect_text.moveCenter(self.selection_rect.center())
-            # Move text box above or below selection
+            
+            # Position the text slightly below the selection or at the bottom if no space
             text_pos = self.selection_rect.bottomLeft() + QPoint(0, 5)
+            if text_pos.y() + 20 > self.height():
+                text_pos = self.selection_rect.topLeft() - QPoint(0, 20)
+                
             painter.drawText(text_pos + QPoint(5, 15), dim_text)
 
     def mousePressEvent(self, event):
